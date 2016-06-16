@@ -1,4 +1,4 @@
-prackage prs
+package prs
 
 import play.api.libs.ws._
 import play.api.libs.ws.ahc._

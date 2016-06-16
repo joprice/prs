@@ -3,7 +3,7 @@ lazy val prs = project.in(file("."))
 
 enablePlugins(JavaAppPackaging)
 
-version := "0.0.1-SNAPSHOT"
+version := "0.0.1"
 
 scalaVersion := "2.11.8"
 
@@ -42,4 +42,11 @@ libraryDependencies ++= Seq(
   "com.lihaoyi" %% "fansi" % "0.1.3",
   "com.iheart" %% "ficus" % "1.2.6"
 )
+
+
+GithubRelease.repo := "joprice/prs"
+
+//GithubRelease.draft := true
+
+GithubRelease.releaseAssets := Seq((packageBin in Universal).value)
 
