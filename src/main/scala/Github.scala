@@ -9,8 +9,6 @@ import scala.concurrent.{Future, ExecutionContext, Await}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import fansi._
-import java.nio.file.Files
-import java.nio.file.Paths
 import java.io.File
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
@@ -23,10 +21,12 @@ case class Repo(owner: String, repo: String)
 case class Auth(token: String)
 
 class Http(system: ActorSystem) {
-  implicit val sys = system
-  implicit val mat = ActorMaterializer()
 
-  val client = AhcWSClient()
+  val client = {
+    implicit val sys = system
+    implicit val mat = ActorMaterializer()
+    AhcWSClient()
+  }
 
   def close() = {
     client.close()
@@ -144,7 +144,7 @@ object Main {
 
   def printResults(results: Seq[(Repo, Seq[Pull])]) = {
     if (results.nonEmpty) {
-      val data = results.map { case (repo, prs) =>
+      val data = results.filter(_._2.nonEmpty).map { case (repo, prs) =>
         val name = Color.Blue(s"${repo.owner}/${repo.repo}")
         Seq(name, Str("")) +: (if (prs.nonEmpty)  {
           headers ++ prs.map { r =>
@@ -174,7 +174,7 @@ object Main {
     val config = ConfigFactory.parseFile(configFile)
 
     config.to[Settings].map { settings =>
-      var http = Http()
+      val http = Http()
       try {
           val repos = settings.repos.map { repo =>
             val Array(owner, name) = repo.split("/", 2)
