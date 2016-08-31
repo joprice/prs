@@ -1,0 +1,2 @@
+* add web url to output
+* use sbt release plugin
