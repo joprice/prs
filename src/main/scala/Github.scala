@@ -91,7 +91,12 @@ object User {
   implicit val format = Json.format[User]
 }
 
-case class Pull(html_url: String, title: String, body: String, user: User)
+case class Pull(
+  html_url: String,
+  title: String,
+  body: String,
+  user: User
+)
 
 object Pull {
   implicit val format = Json.format[Pull]
@@ -140,18 +145,19 @@ object Main {
     ).toOption.flatten
   }
 
-  val headers = Seq(Seq("user", "title").map(Bold.On(_)))
+  val headerNames = Seq("user", "title", "url")
+  val headers = Seq(headerNames.map(Bold.On(_)))
 
   def printResults(results: Seq[(Repo, Seq[Pull])]) = {
     if (results.nonEmpty) {
       val data = results.filter(_._2.nonEmpty).map { case (repo, prs) =>
         val name = Color.Blue(s"${repo.owner}/${repo.repo}")
-        Seq(name, Str("")) +: (if (prs.nonEmpty)  {
+        Seq(name, Str(""), Str("")) +: (if (prs.nonEmpty)  {
           headers ++ prs.map { r =>
-            Seq(r.user.login, r.title).map(Str(_))
+            Seq(r.user.login, r.title, r.html_url).map(Str(_))
           }
         } else Seq.empty)
-      }.reduce(_ ++ Seq(Seq.fill(2)(Str(""))) ++ _)
+      }.reduce(_ ++ Seq(Seq.fill(headerNames.size)(Str(""))) ++ _)
       Table(data)
     }
   }
