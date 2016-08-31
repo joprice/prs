@@ -1,9 +1,8 @@
+import sbtrelease.ReleaseStateTransformations._
 
 lazy val prs = project.in(file("."))
 
 enablePlugins(JavaAppPackaging)
-
-version := "0.0.2"
 
 scalaVersion := "2.11.8"
 
@@ -43,10 +42,35 @@ libraryDependencies ++= Seq(
   "com.iheart" %% "ficus" % "1.2.6"
 )
 
+lazy val checkVersionNotes = taskKey[Unit]("Checks that the notes for the next version are present to avoid build failures.")
+
+checkVersionNotes := {
+  val notesFile = GithubRelease.notesDir.value / (version.value.stripSuffix("-SNAPSHOT") +".markdown")
+  val notesPath = notesFile.relativeTo(baseDirectory.value).getOrElse(notesFile)
+  if (!notesPath.exists) {
+    sys.error(s"Missing notes file $notesPath")
+  }
+}
 
 GithubRelease.repo := "joprice/prs"
 
+GithubRelease.releaseAssets := Seq((packageBin in Universal).value)
+
 //GithubRelease.draft := true
 
-GithubRelease.releaseAssets := Seq((packageBin in Universal).value)
+releaseProcess := Seq[ReleaseStep](
+  releaseStepTask(checkVersionNotes),
+  releaseStepTask(checkGithubCredentials),
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  commitReleaseVersion,
+  releaseStepTask(releaseOnGithub),
+  publishArtifacts,
+  setNextVersion,
+  commitNextVersion,
+  pushChanges
+)
 
