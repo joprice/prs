@@ -34,12 +34,11 @@ publishTo := {
 }
 
 libraryDependencies ++= Seq(
-  "com.typesafe.play" %% "play-ws" % "2.5.3" excludeAll (
-    ExclusionRule(organization = "oauth.signpost")
-  ),
+  "com.typesafe.play" %% "play-json" % "2.5.12",
   "ch.qos.logback" % "logback-classic" % "1.1.7",
   "com.lihaoyi" %% "fansi" % "0.1.3",
-  "com.iheart" %% "ficus" % "1.2.6"
+  "com.iheart" %% "ficus" % "1.2.6",
+  "org.scalaj" %% "scalaj-http" % "2.3.0"
 )
 
 lazy val checkVersionNotes = taskKey[Unit]("Checks that the notes for the next version are present to avoid build failures.")
