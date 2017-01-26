@@ -1,10 +1,6 @@
 package prs
 
-import play.api.libs.ws._
-import play.api.libs.ws.ahc._
 import play.api.libs.json._
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import scala.concurrent.{Future, ExecutionContext, Await}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -15,42 +11,11 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
 import scala.util.Try
+import scalaj.http._
 
 case class Repo(owner: String, repo: String)
 
 case class Auth(token: String)
-
-class Http(system: ActorSystem) {
-
-  val client = {
-    implicit val sys = system
-    implicit val mat = ActorMaterializer()
-    AhcWSClient()
-  }
-
-  def close() = {
-    client.close()
-    system.shutdown()
-  }
-}
-
-object Http {
-  def apply() = new Http(ActorSystem("http-client"))
-
-  implicit class RichResponse(response: Future[WSResponse]) {
-    def asJson[A: Reads](implicit ec: ExecutionContext) = response.flatMap { result ⇒
-      if (result.status == 200) {
-        result.json.validate[A].fold({ errors ⇒
-          Future.failed(
-            new Exception(s"Failed to parse json response: ${JsError.toJson(errors)}")
-          )
-        }, Future.successful)
-      } else {
-        Future.failed(new Exception(s"Got invalid response status ${result.status}"))
-      }
-    }
-  }
-}
 
 object Table {
   def apply(rows: Seq[Seq[fansi.Str]]) = {
@@ -80,7 +45,7 @@ object Table {
   }
 }
 
-import Http._
+//import Http._
 
 //X-RateLimit-Limit: 5000
 //X-RateLimit-Remaining: 4999
@@ -102,23 +67,36 @@ object Pull {
   implicit val format = Json.format[Pull]
 }
 
-class Github(client: WSClient, auth: Auth) {
+class Github(auth: Auth) {
   import Github._
 
-//TODO: pagination
+  def toJson[A: Reads](status: Int, body: String): Future[A] = {
+    if (status == 200) {
+      Json.parse(body).validate[A].fold({ errors ⇒
+        Future.failed(
+          new Exception(s"Failed to parse json response: ${JsError.toJson(errors)}")
+        )
+      }, Future.successful)
+    } else {
+      Future.failed(new Exception(s"Got invalid response status $status $body"))
+    }
+  }
+
+  //TODO: pagination
   def openPullRequests(repo: Repo): Future[Seq[Pull]] = {
-    client.url(s"$githubHost/repos/${repo.owner}/${repo.repo}/pulls")
-      .withQueryString("state" -> "open")
-      .withHeaders("Authorization" -> s"token ${auth.token}")
-      .get()
-      .asJson[Seq[Pull]]
+    val response = Http(s"$githubHost/repos/${repo.owner}/${repo.repo}/pulls")
+      .option(HttpOptions.followRedirects(true))
+      .param("state", "open")
+      .headers("Authorization" -> s"token ${auth.token}")
+      .asString
+    toJson[Seq[Pull]](response.code, response.body)
   }
 }
 
 object Github {
   val githubHost = "https://api.github.com"
 
-  def apply(client: WSClient, auth: Auth): Github = new Github(client, auth)
+  def apply(auth: Auth): Github = new Github(auth)
 }
 
 class PRs(github: Github, repos: Seq[Repo]) {
@@ -132,7 +110,7 @@ class PRs(github: Github, repos: Seq[Repo]) {
 case class Settings(repos: Seq[String])
 
 object PRs {
-  def apply(client: WSClient, repos: Seq[Repo]) = new PRs(Github(client, Auth(sys.env("GITHUB_TOKEN"))), repos)
+  def apply(repos: Seq[Repo]) = new PRs(Github(Auth(sys.env("GITHUB_TOKEN"))), repos)
 
 }
 
@@ -180,18 +158,13 @@ object Main {
     val config = ConfigFactory.parseFile(configFile)
 
     config.to[Settings].map { settings =>
-      val http = Http()
-      try {
-          val repos = settings.repos.map { repo =>
-            val Array(owner, name) = repo.split("/", 2)
-            Repo(owner, name)
-          }
-          val prs = PRs(http.client, repos)
-          val results = Await.result(prs.list(), 5.seconds)
-          printResults(results)
-        } finally {
-          http.close()
+        val repos = settings.repos.map { repo =>
+          val Array(owner, name) = repo.split("/", 2)
+          Repo(owner, name)
         }
+        val prs = PRs(repos)
+        val results = Await.result(prs.list(), 5.seconds)
+        printResults(results)
     }.getOrElse(configError(configFile))
   }
 }
