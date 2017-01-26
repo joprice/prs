@@ -1,0 +1,1 @@
+* move from play-ws to scalaj to improve startup times
